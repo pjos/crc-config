@@ -50,6 +50,8 @@ while ! oc get crd checlusters.org.eclipse.che > /dev/null 2>&1; do
 done
 printf "\r"
 
+
+# https://che.eclipseprojects.io/2022/10/10/@mloriedo-building-container-images.html
 oc create -f - <<EOF
 ---
 apiVersion: v1
