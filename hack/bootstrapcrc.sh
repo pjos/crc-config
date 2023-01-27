@@ -1,5 +1,9 @@
 #!/bin/bash
 
+oc login -u kubeadmin -p $(cat $HOME/.crc/machines/crc/kubeadmin-password)  https://api.crc.testing:6443 || {
+  echo "Unable to login ... Aborting ..."
+}
+
 # https://github.com/bitnami-labs/sealed-secrets#secret-rotation
 helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets -n kube-system
 helm install sealed-secrets -n kube-system --set-string fullnameOverride=sealed-secrets-controller sealed-secrets/sealed-secrets
@@ -168,16 +172,16 @@ rules:
   - "update"
 EOF
 
-while ! oc get sa devworkspace-controller-serviceaccount -n openshift-operators > /dev/null 2>&1; do
-  printf '.'
-  sleep 1
-done
-printf "\r"
+#while ! oc get sa devworkspace-controller-serviceaccount -n openshift-operators > /dev/null 2>&1; do
+#  printf '.'
+#  sleep 1
+#done
+#printf "\r"
 
-oc adm policy add-cluster-role-to-user \
-       get-n-update-container-build-scc \
-       system:serviceaccount:openshift-operators:devworkspace-controller-serviceaccount
-oc adm policy add-scc-to-user container-build developer
+#oc adm policy add-cluster-role-to-user \
+#       get-n-update-container-build-scc \
+#       system:serviceaccount:openshift-operators:devworkspace-controller-serviceaccount
+#oc adm policy add-scc-to-user container-build developer
 
 oc create -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
@@ -208,9 +212,21 @@ spec:
 EOF
 
 # https://access.redhat.com/documentation/en-us/red_hat_codeready_workspaces/2.1/html/installation_guide/installing-codeready-workspaces-in-tls-mode-with-self-signed-certificates_crw
-# Pilla till cerifikat 
-oc login -u kubeadmin -p $(cat $HOME/.crc/machines/crc/kubeadmin-password)  https://api.crc.testing:6443 
-oc create configmap custom-ca --from-file=ca-bundle.crt=$HOME/crc/self-signed/ca.crt  -n openshift-config 
+# Pilla till cerifikat  
+oc create configmap custom-ca --from-file=ca-bundle.crt=$(git rev-parse --show-toplevel)/hack/self-signed/ca.crt  -n openshift-config 
 oc patch proxy/cluster --type=merge --patch='{"spec":{"trustedCA":{"name":"custom-ca"}}}' 
-oc create secret tls domain-cert --cert=$HOME/crc/self-signed/domain.crt --key=$HOME/crc/self-signed/domain.key -n openshift-ingress 
+oc create secret tls domain-cert --cert=$(git rev-parse --show-toplevel)/hack/self-signed/domain.crt --key=$(git rev-parse --show-toplevel)/hack/self-signed/domain.key -n openshift-ingress 
 oc patch ingresscontroller.operator default --type=merge -p '{"spec":{"defaultCertificate": {"name": "domain-cert"}}}' -n openshift-ingress-operator 
+
+echo
+echo "... this will take a while for CRC to roll out certificate changes ..."
+while curl -kf https://console-openshift-console.apps-crc.testing > /dev/null 2>&1 ; do 
+  printf '.'
+  sleep 1
+done  
+while ! curl -kf https://console-openshift-console.apps-crc.testing > /dev/null 2>&1 ; do 
+  printf '.'
+  sleep 1
+done  
+printf "\r"
+crc start 
